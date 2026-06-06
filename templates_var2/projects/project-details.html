@@ -67,18 +67,26 @@
                 {% endif %}
             {% else %}
                 {% if user.is_authenticated %}
-                    <button id="participate-btn" class="black-button"
-                            data-project="{{ project.id }}"
-                            data-user-id="{{ request.user.id }}"
-                            data-user-name="{{ request.user.name }} {{ request.user.surname }}"
-                            data-user-avatar="{% if request.user.avatar %}{{ request.user.avatar.url }}{% else %}{% static 'images/default-avatar.png' %}{% endif %}"
-                    >
-                        {% if request.user in project.participants.all %}
-                            Отказаться от участия
+                    
+                    {% if project.status == "open" %}
+                        <button id="participate-btn" class="black-button"
+                                data-project="{{ project.id }}"
+                                data-user-id="{{ request.user.id }}"
+                                data-user-name="{{ request.user.name }} {{ request.user.surname }}"
+                                data-user-avatar="{% if request.user.avatar %}{{ request.user.avatar.url }}{% else %}{% static 'images/default-avatar.png' %}{% endif %}"
+                        >
+                            {% if request.user in project.participants.all %}
+                                Отказаться от участия
+                            {% else %}
+                                Участвовать
+                            {% endif %}
+                        </button>
+
                         {% else %}
-                            Участвовать
-                        {% endif %}
-                    </button>
+                            <span class="project-closed-message" style="color: #666; font-weight: 500;">
+                                Набор в команду завершен
+                            </span>
+                    {% endif %}    
                 {% endif %}
             {% endif %}
         </div>
