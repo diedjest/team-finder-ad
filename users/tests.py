@@ -1,112 +1,121 @@
 import json
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-from django.contrib.auth import get_user_model
-from .models import Skill
+
 from .forms import UserProfileEditForm
+from .models import Skill
 
 User = get_user_model()
+
+TEST_EMAIL = "test@example.com"
+TEST_PASSWORD = "password123"
+TEST_NAME = "Иван"
+TEST_SURNAME = "Иванов"
+TEST_PHONE = "+79991234567"
+
+TEST_SKILL_NAME = "Python"
+NEW_SKILL_NAME = "Django"
+
+FORM_NAME = "Петр"
+FORM_SURNAME = "Петров"
+RAW_PHONE = "89991112233"
+FORMATTED_PHONE = "+79991112233"
+INVALID_PHONE = "12345"
+
+VALID_GITHUB_URL = "https://github.com/test"
+INVALID_GITHUB_URL = "https://vk.com/test"
+
+CONTENT_TYPE_JSON = "application/json"
 
 
 class UsersTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            email='test@example.com',
-            password='password123',
-            name='Иван',
-            surname='Иванов',
-            phone='+79991234567'
+            email=TEST_EMAIL,
+            password=TEST_PASSWORD,
+            name=TEST_NAME,
+            surname=TEST_SURNAME,
+            phone=TEST_PHONE,
         )
-        self.skill = Skill.objects.create(name='Python')
+        self.skill = Skill.objects.create(name=TEST_SKILL_NAME)
 
     def test_create_user(self):
-        """Проверка успешного создания пользователя с нужными полями"""
-        self.assertEqual(self.user.email, 'test@example.com')
-        self.assertTrue(self.user.check_password('password123'))
+        self.assertEqual(self.user.email, TEST_EMAIL)
+        self.assertTrue(self.user.check_password(TEST_PASSWORD))
 
     def test_skill_str(self):
-        """Проверка строкового отображения навыка"""
-        self.assertEqual(str(self.skill), 'Python')
+        self.assertEqual(str(self.skill), TEST_SKILL_NAME)
 
     def test_valid_phone_number_conversion(self):
-        """Проверка, что номер, начинающийся с 8, конвертируется в +7"""
         form_data = {
-            'name': 'Петр', 'surname': 'Петров',
-            'phone': '89991112233',
-            'github_url': 'https://github.com/test'
+            "name": FORM_NAME,
+            "surname": FORM_SURNAME,
+            "phone": RAW_PHONE,
+            "github_url": VALID_GITHUB_URL,
         }
         form = UserProfileEditForm(data=form_data, instance=self.user)
 
-        self.assertTrue(form.is_valid(), msg=f"Ошибки формы: {form.errors}")
-        self.assertEqual(form.cleaned_data['phone'], '+79991112233')
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["phone"], FORMATTED_PHONE)
 
     def test_invalid_phone_number(self):
-        """Проверка, что короткий или неправильный номер не пройдет"""
-        form_data = {
-            'name': 'Петр', 'surname': 'Петров',
-            'phone': '12345'
-        }
+        form_data = {"name": FORM_NAME, "surname": FORM_SURNAME, "phone": INVALID_PHONE}
         form = UserProfileEditForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('phone', form.errors)
+        self.assertIn("phone", form.errors)
 
     def test_duplicate_phone_number(self):
-        """Проверка уникальности номера телефона"""
-        form_data = {
-            'name': 'Петр', 'surname': 'Петров',
-            'phone': '+79991234567'
-        }
+        form_data = {"name": FORM_NAME, "surname": FORM_SURNAME, "phone": TEST_PHONE}
         form = UserProfileEditForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('phone', form.errors)
+        self.assertIn("phone", form.errors)
 
     def test_invalid_github_url(self):
-        """Проверка, что ссылка ведет именно на GitHub"""
         form_data = {
-            'name': 'Петр', 'surname': 'Петров',
-            'phone': '+79991112233',
-            'github_url': 'https://vk.com/test'
+            "name": FORM_NAME,
+            "surname": FORM_SURNAME,
+            "phone": FORMATTED_PHONE,
+            "github_url": INVALID_GITHUB_URL,
         }
         form = UserProfileEditForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('github_url', form.errors)
+        self.assertIn("github_url", form.errors)
 
     def test_add_existing_skill_api(self):
-        """Проверка добавления существующего навыка через API"""
-        self.client.login(email='test@example.com', password='password123')
-        url = reverse('users:add_skill', args=[self.user.pk])
+        self.client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
+        url = reverse("users:add_skill", args=[self.user.pk])
 
         response = self.client.post(
             url,
-            data=json.dumps({'skill_id': self.skill.id}),
-            content_type='application/json'
+            data=json.dumps({"skill_id": self.skill.id}),
+            content_type=CONTENT_TYPE_JSON,
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(self.skill, self.user.skills.all())
-        self.assertEqual(response.json()['skill_id'], self.skill.id)
+        self.assertEqual(response.json()["skill_id"], self.skill.id)
 
     def test_add_new_skill_api(self):
-        """Проверка создания совершенно нового навыка через API"""
-        self.client.login(email='test@example.com', password='password123')
-        url = reverse('users:add_skill', args=[self.user.pk])
+        self.client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
+        url = reverse("users:add_skill", args=[self.user.pk])
 
         response = self.client.post(
             url,
-            data=json.dumps({'name': 'Django'}),
-            content_type='application/json'
+            data=json.dumps({"name": NEW_SKILL_NAME}),
+            content_type=CONTENT_TYPE_JSON,
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(Skill.objects.filter(name='Django').exists())
-        self.assertEqual(response.json()['created'], True)
+        self.assertTrue(Skill.objects.filter(name=NEW_SKILL_NAME).exists())
+        self.assertEqual(response.json()["created"], True)
 
     def test_remove_skill_api(self):
-        """Проверка удаления навыка из профиля"""
         self.user.skills.add(self.skill)
-        self.client.login(email='test@example.com', password='password123')
+        self.client.login(email=TEST_EMAIL, password=TEST_PASSWORD)
 
-        url = reverse('users:remove_skill', args=[self.user.pk, self.skill.id])
+        url = reverse("users:remove_skill", args=[self.user.pk, self.skill.id])
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, 200)

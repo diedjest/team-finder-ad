@@ -1,24 +1,33 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from http import HTTPStatus
+
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
-from .models import Project
 from .forms import ProjectForm
+from .models import Project
+
+
+def get_paginated_page(request, queryset, per_page=12):
+    paginator = Paginator(queryset, per_page)
+    page_number = request.GET.get("page")
+    return paginator.get_page(page_number)
 
 
 def project_list(request):
-    projects_qs = Project.objects.all().order_by('-created_at')
+    projects_qs = Project.objects.all().order_by("-created_at")
+    page_obj = get_paginated_page(request, projects_qs)
 
-    paginator = Paginator(projects_qs, 12)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    return render(request, "projects/project_list.html", {
-        "page_obj": page_obj,
-        "projects": page_obj,
-    })
+    return render(
+        request,
+        "projects/project_list.html",
+        {
+            "page_obj": page_obj,
+            "projects": page_obj,
+        },
+    )
 
 
 def project_detail(request, pk):
@@ -27,14 +36,17 @@ def project_detail(request, pk):
     is_participant = False
 
     if request.user.is_authenticated:
-        is_participant = project.participants.filter(
-            pk=request.user.pk).exists()
+        is_participant = project.participants.filter(pk=request.user.pk).exists()
 
-    return render(request, "projects/project-details.html", {
-        "project": project,
-        "is_owner": is_owner,
-        "is_participant": is_participant,
-    })
+    return render(
+        request,
+        "projects/project-details.html",
+        {
+            "project": project,
+            "is_owner": is_owner,
+            "is_participant": is_participant,
+        },
+    )
 
 
 @login_required
@@ -51,9 +63,7 @@ def create_project(request):
         form = ProjectForm()
 
     return render(
-        request,
-        "projects/create-project.html",
-        {"form": form, "is_edit": False}
+        request, "projects/create-project.html", {"form": form, "is_edit": False}
     )
 
 
@@ -74,68 +84,65 @@ def edit_project(request, pk):
     return render(
         request,
         "projects/create-project.html",
-        {"form": form, "is_edit": True, "project": project}
+        {"form": form, "is_edit": True, "project": project},
     )
 
 
 @login_required
 @require_POST
 def toggle_participate(request, pk):
-    project = get_object_or_404(Project, pk=pk)
+    project = Project.objects.filter(pk=pk).first()
+
+    if not project:
+        return JsonResponse(
+            {"status": "error", "message": "Проект не найден"},
+            status=HTTPStatus.NOT_FOUND,
+        )
 
     if request.user == project.owner:
         return JsonResponse(
-            {
-                "status": "error",
-                "error": "Автор не может менять статус участия"
-            },
-            status=403
+            {"status": "error", "error": "Автор не может менять статус участия"},
+            status=HTTPStatus.FORBIDDEN,
         )
 
-    if project.status != 'open':
+    if project.status != Project.Status.OPEN:
         return JsonResponse(
-            {
-                "status": "error",
-                "error": "Набор в проект завершен"
-            },
-            status=403
+            {"status": "error", "error": "Набор в проект завершен"},
+            status=HTTPStatus.FORBIDDEN,
         )
 
-    if request.user in project.participants.all():
+    is_participating = project.participants.filter(pk=request.user.pk).exists()
+
+    if is_participating:
         project.participants.remove(request.user)
-        is_participating = False
     else:
         project.participants.add(request.user)
-        is_participating = True
 
-    return JsonResponse({
-        "status": "ok",
-        "participant": is_participating
-    })
+    return JsonResponse({"status": "ok", "participant": not is_participating})
 
 
 @login_required
 def complete_project(request, pk):
     if request.method != "POST":
         return JsonResponse(
-            {
-                "status": "error",
-                "message": "Method not allowed"
-            },
-            status=405
+            {"status": "error", "message": "Method not allowed"},
+            status=HTTPStatus.METHOD_NOT_ALLOWED,
         )
 
-    project = get_object_or_404(Project, pk=pk)
+    project = Project.objects.filter(pk=pk).first()
+
+    if not project:
+        return JsonResponse(
+            {"status": "error", "message": "Проект не найден"},
+            status=HTTPStatus.NOT_FOUND,
+        )
 
     if project.owner == request.user and project.status == Project.Status.OPEN:
         project.status = Project.Status.CLOSED
         project.save()
-        return JsonResponse({"status": "ok", "project_status": "closed"})
+        return JsonResponse({"status": "ok", "project_status": Project.Status.CLOSED})
 
     return JsonResponse(
-        {
-            "status": "error",
-            "message": "Forbidden or project already closed"
-        },
-        status=403
+        {"status": "error", "message": "Forbidden or project already closed"},
+        status=HTTPStatus.FORBIDDEN,
     )

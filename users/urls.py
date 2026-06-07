@@ -1,4 +1,5 @@
 from django.urls import path
+
 from . import views
 
 app_name = "users"
@@ -18,6 +19,6 @@ urlpatterns = [
     path(
         "<int:pk>/skills/<int:skill_id>/remove/",
         views.remove_skill,
-        name="remove_skill"
+        name="remove_skill",
     ),
 ]
